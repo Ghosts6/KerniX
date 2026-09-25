@@ -53,3 +53,14 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# EECS Projects
+Resource/**/fcfs
+Resource/**/rr
+Resource/**/priority
+Resource/**/priority_rr
+Resource/**/sjf
+Resource/**/mmu
+Resource/**/*.o
+Resource/**/output*.csv
+Resource/**/addresses.txt
