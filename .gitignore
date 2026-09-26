@@ -1,49 +1,52 @@
-# Prerequisites
-*.d
+# Build output
+build/
+out/
+bin/
+iso/
+isodir/
+sysroot/
 
-# Object files
+# Object and dependency files
 *.o
-*.ko
 *.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
+*.d
+*.su
+*.dwo
 *.gch
 *.pch
 
 # Libraries
-*.lib
 *.a
 *.la
 *.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
+*.lib
 *.so
 *.so.*
 *.dylib
+*.dll
 
-# Executables
+# Linked images and executables
+*.elf
 *.exe
 *.out
 *.app
+*.bin
+*.img
+*.iso
+*.sys
+*.hex
 *.i*86
 *.x86_64
-*.hex
 
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
+# Linker output
+*.map
+*.ilk
+*.exp
 
-# Kernel Module Compile Results
-*.mod*
+# Linux kernel module artifacts
+*.ko
+*.mod
+*.mod.c
 *.cmd
 .tmp_versions/
 modules.order
@@ -51,16 +54,55 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-# debug information files
-*.dwo
+# Cross toolchain (built locally, never committed)
+toolchain/
+cross/
+opt/cross/
 
-# EECS Projects
+# Emulator and debugger output
+*.log
+serial.txt
+bochsout.txt
+bx_enh_dbg.ini
+.gdb_history
+core
+core.*
+vgcore.*
+
+# Test output
+tests/**/results/
+*.gcda
+*.gcno
+*.gcov
+coverage/
+
+# Editor and tooling
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cache/
+compile_commands.json
+
+# OS files
+.DS_Store
+._*
+Thumbs.db
+*.dSYM/
+*.pdb
+*.idb
+
+# Course projects (Resource/EECS3221)
 Resource/**/fcfs
+Resource/**/sjf
 Resource/**/rr
 Resource/**/priority
 Resource/**/priority_rr
-Resource/**/sjf
 Resource/**/mmu
-Resource/**/*.o
 Resource/**/output*.csv
 Resource/**/addresses.txt
+!Resource/**/BACKING_STORE.bin
+
+# Development
+Dev/
