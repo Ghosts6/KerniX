@@ -8,6 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential gcc-multilib nasm qemu-system-x86 gdb make clang-format \
+        python3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
