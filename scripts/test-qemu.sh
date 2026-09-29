@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Stage 0 QEMU smoke: confirm the kernel ELF is Multiboot-loadable.
-# Stage 1 will extend this to check serial output and isa-debug-exit.
+# QEMU boot test: Multiboot header, serial banner, and isa-debug-exit success.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ELF="${1:-$ROOT/build/kernix.elf}"
+QEMU="${QEMU:-qemu-system-i386}"
+BANNER="KerniX boot OK"
+# isa-debug-exit: writing code 0 yields process exit status 1.
+EXPECT_EXIT=1
 
 if [[ ! -f "$ELF" ]]; then
     echo "missing kernel ELF: $ELF (run make first)" >&2
@@ -21,7 +24,6 @@ MB_MAGIC = 0x1BADB002
 with open(path, "rb") as f:
     data = f.read()
 
-# ELF32 header: e_phoff@0x1c, e_phentsize@0x2a, e_phnum@0x2c
 if data[:4] != b"\x7fELF":
     sys.exit(f"not an ELF: {path}")
 if data[4] != 1:
@@ -39,7 +41,6 @@ for i in range(e_phnum):
     if p_type != 1:  # PT_LOAD
         continue
     chunk = data[p_offset : p_offset + p_filesz]
-    # Multiboot header must be in the first 8 KiB of the OS image.
     window = chunk[:8192]
     for j in range(0, max(0, len(window) - 12), 4):
         magic, flags, checksum = struct.unpack_from("<III", window, j)
@@ -52,6 +53,36 @@ for i in range(e_phnum):
 
 if not found:
     sys.exit("Multiboot header (magic 0x1BADB002) not found in first 8 KiB of any PT_LOAD")
-
-print("qemu smoke (stage 0) passed")
 PY
+
+SERIAL="$(mktemp)"
+trap 'rm -f "$SERIAL"' EXIT
+
+set +e
+"$QEMU" \
+    -kernel "$ELF" \
+    -serial stdio \
+    -display none \
+    -no-reboot \
+    -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+    >"$SERIAL" 2>/dev/null
+status=$?
+set -e
+
+if [[ "$status" -ne "$EXPECT_EXIT" ]]; then
+    echo "FAIL qemu exit: got $status want $EXPECT_EXIT" >&2
+    echo "--- serial ---" >&2
+    cat "$SERIAL" >&2 || true
+    exit 1
+fi
+echo "ok qemu exit $status"
+
+if ! grep -q "$BANNER" "$SERIAL"; then
+    echo "FAIL serial banner '$BANNER' not found" >&2
+    echo "--- serial ---" >&2
+    cat "$SERIAL" >&2 || true
+    exit 1
+fi
+echo "ok serial banner"
+
+echo "qemu boot test passed"

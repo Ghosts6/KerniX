@@ -25,7 +25,9 @@ global _start
 extern kmain
 
 _start:
+    cli
     mov esp, stack_top
+    xor ebp, ebp
     push ebx                            ; multiboot info pointer
     push eax                            ; multiboot magic
     call kmain
@@ -34,3 +36,6 @@ _start:
 .hang:
     hlt
     jmp .hang
+
+; Mark stack non-executable for modern linkers (gcc -m32).
+section .note.GNU-stack noalloc noexec nowrite progbits

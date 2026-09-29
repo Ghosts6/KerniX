@@ -43,9 +43,5 @@ jobs:
       - name: Host unit tests
         run: docker run --rm -v "${{ github.workspace }}":/src -u "$(id -u):$(id -g)" kernix-build make test-host
 
-      - name: Build kernel for QEMU smoke
-        run: make docker
-
-      - name: QEMU smoke (Multiboot)
-        # Script-only so CI does not try a host rebuild outside the image.
-        run: ./scripts/test-qemu.sh build/kernix.elf
+      - name: QEMU boot test
+        run: docker run --rm -v "${{ github.workspace }}":/src -u "$(id -u):$(id -g)" kernix-build make test-qemu

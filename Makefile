@@ -25,9 +25,13 @@ HOSTCC    := $(shell command -v cc || command -v gcc)
 
 CFLAGS    := -std=c11 -ffreestanding -O2 -g -Wall -Wextra -Werror -Iinclude $(ARCHFLAGS)
 ASFLAGS   := -f elf32 -g -F dwarf
-LDFLAGS   := -T $(LDSCRIPT) -ffreestanding -nostdlib $(LDARCH)
+LDFLAGS   := -T $(LDSCRIPT) -ffreestanding -nostdlib -Wl,-z,noexecstack $(LDARCH)
 LDLIBS    := -lgcc
-QEMUFLAGS := -kernel $(ELF) -serial stdio -no-reboot -no-shutdown
+# -display none so isa-debug-exit can terminate QEMU (macOS cocoa keeps the process alive).
+# Override with: make run QEMUDISPLAY=cocoa
+QEMUDISPLAY ?= none
+QEMUFLAGS := -kernel $(ELF) -serial stdio -display $(QEMUDISPLAY) -no-reboot \
+             -device isa-debug-exit,iobase=0xf4,iosize=0x04
 
 C_SRCS    := $(shell find $(SRC_DIRS) -name '*.c' 2>/dev/null)
 ASM_SRCS  := $(shell find $(SRC_DIRS) -name '*.asm' 2>/dev/null)
@@ -69,7 +73,10 @@ $(BUILD)/tests/host/$(HOST_ID)/%: tests/host/%.c
 	$(HOSTCC) $(HOSTCFLAGS) $< -o $@
 
 run: $(ELF)
-	$(QEMU) $(QEMUFLAGS)
+	@$(QEMU) $(QEMUFLAGS); \
+	ec=$$?; \
+	if [ $$ec -eq 1 ]; then exit 0; fi; \
+	exit $$ec
 
 debug: $(ELF)
 	@echo "QEMU paused, GDB stub on localhost:1234"
@@ -101,11 +108,11 @@ docker:
 
 help:
 	@echo "all           build $(ELF)"
-	@echo "run           boot the kernel in QEMU"
+	@echo "run           boot the kernel in QEMU (serial banner; QEMUDISPLAY=cocoa for GUI)"
 	@echo "debug         boot paused with GDB stub on :1234"
-	@echo "test          run host and QEMU smoke tests"
+	@echo "test          run host and QEMU boot tests"
 	@echo "test-host     run host unit tests"
-	@echo "test-qemu     Multiboot / QEMU smoke check on $(ELF)"
+	@echo "test-qemu     boot in QEMU, check serial banner and exit code"
 	@echo "clean         remove $(BUILD)/"
 	@echo "docker-build  build the toolchain image"
 	@echo "docker        run make inside the toolchain image"
