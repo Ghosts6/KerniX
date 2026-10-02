@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# QEMU boot test: Multiboot header, serial banner, and isa-debug-exit success.
+# QEMU boot tests: Multiboot header, timer ticks, and exception reporting.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -55,34 +55,81 @@ if not found:
     sys.exit("Multiboot header (magic 0x1BADB002) not found in first 8 KiB of any PT_LOAD")
 PY
 
-SERIAL="$(mktemp)"
-trap 'rm -f "$SERIAL"' EXIT
+run_qemu() {
+    local append="${1:-}"
+    local serial
+    serial="$(mktemp)"
+    local -a cmd=(
+        "$QEMU"
+        -kernel "$ELF"
+        -serial stdio
+        -display none
+        -no-reboot
+        -device isa-debug-exit,iobase=0xf4,iosize=0x04
+    )
+    if [[ -n "$append" ]]; then
+        cmd+=(-append "$append")
+    fi
 
-set +e
-"$QEMU" \
-    -kernel "$ELF" \
-    -serial stdio \
-    -display none \
-    -no-reboot \
-    -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-    >"$SERIAL" 2>/dev/null
-status=$?
-set -e
+    set +e
+    "${cmd[@]}" >"$serial" 2>/dev/null
+    local status=$?
+    set -e
 
-if [[ "$status" -ne "$EXPECT_EXIT" ]]; then
-    echo "FAIL qemu exit: got $status want $EXPECT_EXIT" >&2
+    if [[ "$status" -ne "$EXPECT_EXIT" ]]; then
+        echo "FAIL qemu exit: got $status want $EXPECT_EXIT (append='$append')" >&2
+        echo "--- serial ---" >&2
+        cat "$serial" >&2 || true
+        rm -f "$serial"
+        return 1
+    fi
+
+    if ! grep -q "$BANNER" "$serial"; then
+        echo "FAIL serial banner '$BANNER' not found (append='$append')" >&2
+        echo "--- serial ---" >&2
+        cat "$serial" >&2 || true
+        rm -f "$serial"
+        return 1
+    fi
+
+    printf '%s' "$serial"
+}
+
+SERIAL="$(run_qemu)"
+trap 'rm -f "$SERIAL" "$SERIAL_DE" "$SERIAL_BP" 2>/dev/null' EXIT
+
+if ! grep -q "timer ok ticks=" "$SERIAL"; then
+    echo "FAIL timer ok message not found" >&2
     echo "--- serial ---" >&2
     cat "$SERIAL" >&2 || true
     exit 1
 fi
-echo "ok qemu exit $status"
+echo "ok timer ticks"
 
-if ! grep -q "$BANNER" "$SERIAL"; then
-    echo "FAIL serial banner '$BANNER' not found" >&2
+if ! grep -q "pmm: frames total=" "$SERIAL"; then
+    echo "FAIL pmm stats not found" >&2
     echo "--- serial ---" >&2
     cat "$SERIAL" >&2 || true
     exit 1
 fi
-echo "ok serial banner"
+echo "ok pmm stats"
+
+SERIAL_DE="$(run_qemu "fault=de")"
+if ! grep -q "exception 0 (divide error)" "$SERIAL_DE"; then
+    echo "FAIL divide error exception not reported" >&2
+    echo "--- serial ---" >&2
+    cat "$SERIAL_DE" >&2 || true
+    exit 1
+fi
+echo "ok divide error fault"
+
+SERIAL_BP="$(run_qemu "fault=bp")"
+if ! grep -q "exception 3 (breakpoint)" "$SERIAL_BP"; then
+    echo "FAIL breakpoint exception not reported" >&2
+    echo "--- serial ---" >&2
+    cat "$SERIAL_BP" >&2 || true
+    exit 1
+fi
+echo "ok breakpoint fault"
 
 echo "qemu boot test passed"
