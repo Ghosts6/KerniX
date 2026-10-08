@@ -72,6 +72,10 @@ $(BUILD)/tests/host/$(HOST_ID)/%: tests/host/%.c
 	@mkdir -p $(dir $@)
 	$(HOSTCC) $(HOSTCFLAGS) $< -o $@
 
+$(BUILD)/tests/host/$(HOST_ID)/pmm_test: tests/host/pmm_test.c mm/pmm.c lib/string.c arch/x86/multiboot.c
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HOSTCFLAGS) -DKERNIX_HOST_TEST $^ -o $@
+
 run: $(ELF)
 	@$(QEMU) $(QEMUFLAGS); \
 	ec=$$?; \
