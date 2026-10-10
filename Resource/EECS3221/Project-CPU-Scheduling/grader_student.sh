@@ -10,7 +10,7 @@ echo "--------------- FCFS ---------------------"
 echo "Make FCFS"
 make fcfs
 echo "Running FCFS"
-fcfs schedule.txt > student-fcfs-output.txt
+./fcfs schedule.txt > student-fcfs-output.txt
 echo "Grading FCFS"
 
 DIFF=$(diff -wB correct-fcfs-output.txt student-fcfs-output.txt) 
@@ -27,7 +27,7 @@ echo "--------------- SJF ---------------------"
 echo "Make SJF"
 make sjf
 echo "Running SJF"
-sjf schedule.txt > student-sjf-output.txt
+./sjf schedule.txt > student-sjf-output.txt
 echo "Grading SJF"
 
 DIFF=$(diff -wB correct-sjf-output.txt student-sjf-output.txt) 
@@ -44,7 +44,7 @@ echo "--------------- Round Robin ---------------------"
 echo "Make RR"
 make rr
 echo "Running RR"
-rr schedule.txt > student-rr-output.txt
+./rr schedule.txt > student-rr-output.txt
 echo "Grading RR"
 
 DIFF=$(diff -wB correct-rr-output.txt student-rr-output.txt) 
@@ -61,7 +61,7 @@ echo "--------------- PRIORITY ---------------------"
 echo "Make PRIORITY"
 make priority
 echo "Running PRIORITY"
-priority schedule.txt > student-priority-output.txt
+./priority schedule.txt > student-priority-output.txt
 echo "Grading PRIORITY"
 
 DIFF=$(diff -wB correct-priority-output.txt student-priority-output.txt) 
@@ -78,7 +78,7 @@ echo "--------------- PRIORITY_RR ---------------------"
 echo "Make PRIORITY_RR"
 make priority_rr
 echo "Running PRIORITY_RR"
-priority_rr schedule.txt > student-priority_rr-output.txt
+./priority_rr schedule.txt > student-priority_rr-output.txt
 echo "Grading PRIORITY_RR"
 
 DIFF=$(diff -wB correct-priority_rr-output.txt student-priority_rr-output.txt) 

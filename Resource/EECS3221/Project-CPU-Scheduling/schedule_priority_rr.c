@@ -13,12 +13,18 @@ typedef struct {
     int remaining_burst;
 } QueueEntry;
 
+// Tasks are kept in input order in a dynamic array. response_recorded[i]
+// and remaining_burst[i] track tasks[i] across priority levels.
 static Task **tasks = NULL;
 static int task_count = 0;
 static int capacity = 10;
 static int *response_recorded = NULL;
 static int *remaining_burst = NULL;
 
+/**
+ * Called by driver.c once per input line. Copies the task into the array,
+ * doubling capacity (for all arrays) when full so any number of tasks works.
+ */
 void add(char *name, int priority, int burst) {
     if (tasks == NULL) {
         tasks = malloc(sizeof(Task*) * capacity);
@@ -45,15 +51,23 @@ void add(char *name, int priority, int burst) {
     task_count++;
 }
 
+/**
+ * For each priority level, from MAX_PRIORITY down to MIN_PRIORITY, builds a
+ * queue of that level's tasks in input order and runs round-robin on it
+ * until the level is empty, using the same circular-queue approach as RR.
+ * Metrics (all tasks arrive at 0):
+ *   response   = time of first slice
+ *   turnaround = completion time
+ *   waiting    = turnaround - original burst
+ */
 void schedule() {
     int current_time = 0;
     double total_waiting = 0.0;
     double total_turnaround = 0.0;
     double total_response = 0.0;
 
-    // Process by priority level (highest to lowest)
     for (int priority = MAX_PRIORITY; priority >= MIN_PRIORITY; priority--) {
-        // Create queue for tasks with this priority (maintain input order)
+        // Gather this level's tasks; scanning in index order keeps input order.
         QueueEntry *queue = malloc(sizeof(QueueEntry) * task_count);
         int queue_size = 0;
 
@@ -67,28 +81,30 @@ void schedule() {
 
         int queue_front = 0;
 
-        // Process all tasks at this priority level with RR
         while (queue_size > 0) {
             QueueEntry *current = &queue[queue_front];
             int task_id = current->task_idx;
             Task *current_task = tasks[task_id];
 
-            // Record response time on first execution
+            // Response time is only counted on the task's first slice.
             if (!response_recorded[task_id]) {
                 response_recorded[task_id] = 1;
                 total_response += current_time;
             }
 
-            // If only one task left in queue, run to completion; otherwise use quantum
+            // Only one task left at this level: no one to share with, so run
+            // it to completion (matches correct-priority_rr-output.txt).
+            // Otherwise run a quantum, or the remainder if shorter.
             int time_slice = current->remaining_burst;
-            if (queue_size > 1) {  // More than one task in queue
+            if (queue_size > 1) {
                 time_slice = QUANTUM;
                 if (current->remaining_burst < QUANTUM) {
                     time_slice = current->remaining_burst;
                 }
             }
 
-            // Show remaining burst before execution
+            // run() prints task->burst, but the output must show the remaining
+            // burst, so swap it in for the call and restore the original after.
             int original_burst = current_task->burst;
             current_task->burst = current->remaining_burst;
             run(current_task, time_slice);
@@ -98,7 +114,6 @@ void schedule() {
             remaining_burst[task_id] -= time_slice;
             current_time += time_slice;
 
-            // If task is done, remove from queue and record metrics
             if (current->remaining_burst == 0) {
                 int completion_time = current_time;
                 int turnaround_time = completion_time;
@@ -107,7 +122,9 @@ void schedule() {
                 total_turnaround += turnaround_time;
                 total_waiting += waiting_time;
 
-                // Remove this task from queue
+                // Remove the finished task by shifting later entries left. The
+                // next task slides into queue_front, so the index stays put
+                // unless we removed the last entry, in which case wrap to 0.
                 for (int i = queue_front; i < queue_size - 1; i++) {
                     queue[i] = queue[i + 1];
                 }
@@ -117,7 +134,7 @@ void schedule() {
                     queue_front = 0;
                 }
             } else {
-                // Move to next task in queue
+                // Unfinished: it keeps its place and the next task gets a turn.
                 queue_front = (queue_front + 1) % queue_size;
             }
         }

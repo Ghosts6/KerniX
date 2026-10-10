@@ -4,8 +4,7 @@
 #include "list.h"
 #include "task.h"
 
-// Various list operations
- 
+
 // add a new task to the list of tasks
 void insert(struct node **head, Task *newTask) {
     // add the new task to the list 
