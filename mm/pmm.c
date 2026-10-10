@@ -8,6 +8,7 @@
 #ifndef KERNIX_HOST_TEST
 #include <kernix/kprintf.h>
 #include <kernix/kernel.h>
+#include <kernix/paging.h>
 #else
 #include <stdio.h>
 #include <stdlib.h>
@@ -194,8 +195,13 @@ void pmm_init(uint32_t mbi_addr) {
     }
 
     mark_region_used(0, 0x100000ull);
+#ifndef KERNIX_HOST_TEST
+    mark_region_used(virt_to_phys((uint32_t)(uintptr_t)kernel_start),
+                     (uint32_t)(uintptr_t)(kernel_end - kernel_start));
+#else
     mark_region_used((uint32_t)(uintptr_t)kernel_start,
                      (uint32_t)(uintptr_t)(kernel_end - kernel_start));
+#endif
     mark_region_used(mbi_addr, sizeof(multiboot_info_t));
     if ((mbi->flags & MULTIBOOT_INFO_MMAP) != 0 && mbi->mmap_addr != 0) {
         mark_region_used(mbi->mmap_addr, mbi->mmap_length);

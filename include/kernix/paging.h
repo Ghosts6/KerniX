@@ -1,0 +1,52 @@
+#ifndef KERNIX_PAGING_H
+#define KERNIX_PAGING_H
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+
+#define PAGE_SIZE 4096u
+
+#define KERNEL_VIRT_BASE 0xC0000000u
+
+// Bootstrap maps this much low memory (identity + higher half) with 4 MiB pages.
+#define KERNEL_EARLY_MAP_MB 16u
+
+#define PAGE_PRESENT 0x001u
+#define PAGE_WRITE   0x002u
+#define PAGE_USER    0x004u
+
+#define PTE_FRAME_MASK 0xFFFFF000u
+
+static inline uint32_t virt_to_phys(uint32_t vaddr) {
+    return vaddr - KERNEL_VIRT_BASE;
+}
+
+static inline uint32_t phys_to_virt(uint32_t paddr) {
+    return paddr + KERNEL_VIRT_BASE;
+}
+
+static inline uint32_t page_align_down(uint32_t addr) {
+    return addr & ~(PAGE_SIZE - 1u);
+}
+
+static inline uint32_t page_align_up(uint32_t addr) {
+    return (addr + PAGE_SIZE - 1u) & ~(PAGE_SIZE - 1u);
+}
+
+void paging_init(void);
+bool map_page(uint32_t virt, uint32_t phys, uint32_t flags);
+void unmap_page(uint32_t virt);
+uint32_t get_mapping(uint32_t virt);
+void invlpg(uint32_t virt);
+
+// Page-fault error code bits (Intel Vol. 3).
+#define PF_PRESENT  (1u << 0)
+#define PF_WRITE    (1u << 1)
+#define PF_USER     (1u << 2)
+#define PF_RESERVED (1u << 3)
+#define PF_IFETCH   (1u << 4)
+
+void page_fault_dump(uint32_t err_code, uint32_t cr2);
+
+#endif

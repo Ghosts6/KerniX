@@ -1,30 +1,32 @@
-/* Kernel layout: loaded at 1 MiB, multiboot header first. */
+/* Higher-half kernel: VMA at 0xC0000000 + phys, LMA at physical load address. */
 
-ENTRY(_start)
+ENTRY(start)
+
+KERNEL_VIRT_BASE = 0xC0000000;
 
 SECTIONS
 {
-    . = 1M;
+    . = KERNEL_VIRT_BASE + 1M;
 
     kernel_start = .;
 
-    .text BLOCK(4K) : ALIGN(4K)
+    .text BLOCK(4K) : AT(ADDR(.text) - KERNEL_VIRT_BASE)
     {
         KEEP(*(.multiboot))
         *(.text*)
     }
 
-    .rodata BLOCK(4K) : ALIGN(4K)
+    .rodata BLOCK(4K) : AT(ADDR(.rodata) - KERNEL_VIRT_BASE)
     {
         *(.rodata*)
     }
 
-    .data BLOCK(4K) : ALIGN(4K)
+    .data BLOCK(4K) : AT(ADDR(.data) - KERNEL_VIRT_BASE)
     {
         *(.data*)
     }
 
-    .bss BLOCK(4K) : ALIGN(4K)
+    .bss BLOCK(4K) : AT(ADDR(.bss) - KERNEL_VIRT_BASE)
     {
         *(COMMON)
         *(.bss*)
@@ -32,10 +34,12 @@ SECTIONS
 
     kernel_end = .;
 
+    /* Multiboot/QEMU jumps to the physical address of the entry point. */
+    start = _start - KERNEL_VIRT_BASE;
+
     /DISCARD/ :
     {
         *(.comment)
-        *(.note*)
         *(.eh_frame*)
     }
 }

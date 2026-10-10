@@ -6,6 +6,7 @@
 #include <kernix/qemu.h>
 #include <kernix/cpu.h>
 #include <kernix/io.h>
+#include <kernix/paging.h>
 
 static const char *exception_name(uint32_t num) {
     static const char *names[] = {
@@ -49,7 +50,7 @@ void isr_handler(interrupt_frame_t *frame) {
     kprintf("  eip=%x cs=%x eflags=%x\n", frame->eip, frame->cs, frame->eflags);
 
     if (frame->int_no == 14) {
-        kprintf("  cr2=%x\n", read_cr2());
+        page_fault_dump(frame->err_code, read_cr2());
     }
 
     // Report the fault cleanly for tests; do not triple-fault.

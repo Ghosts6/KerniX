@@ -96,7 +96,7 @@ run_qemu() {
 }
 
 SERIAL="$(run_qemu)"
-trap 'rm -f "$SERIAL" "$SERIAL_DE" "$SERIAL_BP" 2>/dev/null' EXIT
+trap 'rm -f "$SERIAL" "$SERIAL_DE" "$SERIAL_BP" "$SERIAL_PF" 2>/dev/null' EXIT
 
 if ! grep -q "timer ok ticks=" "$SERIAL"; then
     echo "FAIL timer ok message not found" >&2
@@ -113,6 +113,30 @@ if ! grep -q "pmm: frames total=" "$SERIAL"; then
     exit 1
 fi
 echo "ok pmm stats"
+
+if ! grep -q "higher half" "$SERIAL"; then
+    echo "FAIL higher-half banner not found" >&2
+    echo "--- serial ---" >&2
+    cat "$SERIAL" >&2 || true
+    exit 1
+fi
+echo "ok higher half"
+
+if ! grep -q "paging: 4K tables active" "$SERIAL"; then
+    echo "FAIL paging init message not found" >&2
+    echo "--- serial ---" >&2
+    cat "$SERIAL" >&2 || true
+    exit 1
+fi
+echo "ok paging"
+
+if ! grep -q "heap: .* KiB ready" "$SERIAL"; then
+    echo "FAIL heap ready message not found" >&2
+    echo "--- serial ---" >&2
+    cat "$SERIAL" >&2 || true
+    exit 1
+fi
+echo "ok heap"
 
 SERIAL_DE="$(run_qemu "fault=de")"
 if ! grep -q "exception 0 (divide error)" "$SERIAL_DE"; then
@@ -131,5 +155,20 @@ if ! grep -q "exception 3 (breakpoint)" "$SERIAL_BP"; then
     exit 1
 fi
 echo "ok breakpoint fault"
+
+SERIAL_PF="$(run_qemu "fault=pf")"
+if ! grep -q "exception 14 (page fault)" "$SERIAL_PF"; then
+    echo "FAIL page fault exception not reported" >&2
+    echo "--- serial ---" >&2
+    cat "$SERIAL_PF" >&2 || true
+    exit 1
+fi
+if ! grep -q "page fault cr2=deadb000" "$SERIAL_PF"; then
+    echo "FAIL page fault cr2/decode not reported" >&2
+    echo "--- serial ---" >&2
+    cat "$SERIAL_PF" >&2 || true
+    exit 1
+fi
+echo "ok page fault"
 
 echo "qemu boot test passed"

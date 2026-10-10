@@ -77,6 +77,10 @@ $(BUILD)/tests/host/$(HOST_ID)/pmm_test: tests/host/pmm_test.c mm/pmm.c lib/stri
 	# -fno-builtin: avoid GCC rewriting our memset/strlen into recursive calls.
 	$(HOSTCC) $(HOSTCFLAGS) -fno-builtin -DKERNIX_HOST_TEST $^ -o $@
 
+$(BUILD)/tests/host/$(HOST_ID)/heap_test: tests/host/heap_test.c mm/heap.c
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HOSTCFLAGS) $^ -o $@
+
 run: $(ELF)
 	@$(QEMU) $(QEMUFLAGS); \
 	ec=$$?; \

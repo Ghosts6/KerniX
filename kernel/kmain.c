@@ -10,11 +10,20 @@
 #include <kernix/cpu.h>
 #include <kernix/multiboot.h>
 #include <kernix/pmm.h>
+#include <kernix/paging.h>
+#include <kernix/heap.h>
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #define PIT_HZ           100
 #define TIMER_WAIT_TICKS 10
+#define KERNEL_HEAP_SIZE (256u * 1024u)
+
+extern char kernel_start[];
+extern char kernel_end[];
+
+static uint8_t kernel_heap[KERNEL_HEAP_SIZE] __attribute__((aligned(16)));
 
 static bool cmdline_has(const char *cmdline, const char *token) {
     if (cmdline == 0 || token == 0 || *token == '\0') {
@@ -52,6 +61,11 @@ static void trigger_breakpoint(void) {
     __asm__ volatile("int3");
 }
 
+static void trigger_page_fault(void) {
+    volatile uint32_t *unmapped = (volatile uint32_t *)0xDEADB000u;
+    *unmapped = 1;
+}
+
 void kmain(uint32_t magic, uint32_t mbi_addr) {
     serial_init();
     vga_init();
@@ -71,9 +85,21 @@ void kmain(uint32_t magic, uint32_t mbi_addr) {
     sti();
 
     kprintf("%s\n", KERNIX_BANNER);
+    kprintf("kernel at %x-%x (higher half)\n", (uint32_t)(uintptr_t)kernel_start,
+            (uint32_t)(uintptr_t)kernel_end);
 
     pmm_init(mbi_addr);
     pmm_print_stats();
+
+    paging_init();
+
+    heap_init(kernel_heap, sizeof(kernel_heap));
+    void *smoke = kmalloc(64);
+    if (smoke == 0) {
+        panic("heap smoke alloc failed");
+    }
+    kfree(smoke);
+    kprintf("heap: %u KiB ready\n", KERNEL_HEAP_SIZE / 1024u);
 
     if (cmdline_has(cmdline, "fault=de")) {
         kprintf("triggering divide error\n");
@@ -85,6 +111,12 @@ void kmain(uint32_t magic, uint32_t mbi_addr) {
         kprintf("triggering breakpoint\n");
         trigger_breakpoint();
         panic("breakpoint did not fire");
+    }
+
+    if (cmdline_has(cmdline, "fault=pf")) {
+        kprintf("triggering page fault\n");
+        trigger_page_fault();
+        panic("page fault did not fire");
     }
 
     while (pit_ticks() < TIMER_WAIT_TICKS) {
