@@ -81,6 +81,10 @@ $(BUILD)/tests/host/$(HOST_ID)/heap_test: tests/host/heap_test.c mm/heap.c
 	@mkdir -p $(dir $@)
 	$(HOSTCC) $(HOSTCFLAGS) $^ -o $@
 
+$(BUILD)/tests/host/$(HOST_ID)/sched_test: tests/host/sched_test.c sched/policy.c sched/sim.c
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HOSTCFLAGS) $^ -o $@
+
 run: $(ELF)
 	@$(QEMU) $(QEMUFLAGS); \
 	ec=$$?; \
