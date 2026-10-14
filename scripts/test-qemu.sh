@@ -138,6 +138,29 @@ if ! grep -q "heap: .* KiB ready" "$SERIAL"; then
 fi
 echo "ok heap"
 
+for want in "sched demo ok policy=rr" "sched yield ok" "sched sleep ok"; do
+    if ! grep -q "$want" "$SERIAL"; then
+        echo "FAIL '$want' not found" >&2
+        echo "--- serial ---" >&2
+        cat "$SERIAL" >&2 || true
+        exit 1
+    fi
+done
+echo "ok sched rr, yield, sleep"
+
+for policy in fcfs sjf priority priority_rr; do
+    SERIAL_SCHED="$(run_qemu "sched=$policy")"
+    if ! grep -q "sched demo ok policy=$policy " "$SERIAL_SCHED"; then
+        echo "FAIL sched demo for policy=$policy" >&2
+        echo "--- serial ---" >&2
+        cat "$SERIAL_SCHED" >&2 || true
+        rm -f "$SERIAL_SCHED"
+        exit 1
+    fi
+    rm -f "$SERIAL_SCHED"
+    echo "ok sched $policy"
+done
+
 SERIAL_DE="$(run_qemu "fault=de")"
 if ! grep -q "exception 0 (divide error)" "$SERIAL_DE"; then
     echo "FAIL divide error exception not reported" >&2

@@ -7,6 +7,7 @@
 #include <kernix/cpu.h>
 #include <kernix/io.h>
 #include <kernix/paging.h>
+#include <kernix/sched.h>
 
 static const char *exception_name(uint32_t num) {
     static const char *names[] = {
@@ -61,8 +62,14 @@ void irq_handler(interrupt_frame_t *frame) {
     uint8_t irq = (uint8_t)(frame->int_no - PIC_IRQ_BASE);
 
     if (frame->int_no == 32) {
+        // EOI first: sched_on_tick may switch to a task that never returns here.
+        pic_send_eoi(irq);
         pit_on_tick();
-    } else if (frame->int_no == 33) {
+        sched_on_tick();
+        return;
+    }
+
+    if (frame->int_no == 33) {
         (void)inb(0x60); // drain keyboard scancode
     }
 

@@ -15,6 +15,21 @@ static inline void hlt(void) {
     __asm__ volatile("hlt");
 }
 
+#define EFLAGS_IF 0x200u
+
+// Disable interrupts and return the previous EFLAGS for irq_restore.
+static inline uint32_t irq_save(void) {
+    uint32_t flags;
+    __asm__ volatile("pushf\n\tpop %0\n\tcli" : "=r"(flags) : : "memory");
+    return flags;
+}
+
+static inline void irq_restore(uint32_t flags) {
+    if ((flags & EFLAGS_IF) != 0) {
+        sti();
+    }
+}
+
 static inline uint32_t read_cr0(void) {
     uint32_t value;
     __asm__ volatile("mov %%cr0, %0" : "=r"(value));

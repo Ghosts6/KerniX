@@ -12,6 +12,8 @@
 #include <kernix/pmm.h>
 #include <kernix/paging.h>
 #include <kernix/heap.h>
+#include <kernix/sched.h>
+#include <kernix/sched_selftest.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -44,6 +46,29 @@ static bool cmdline_has(const char *cmdline, const char *token) {
         }
     }
     return false;
+}
+
+// Value of "key=value" in the cmdline, terminated by space/tab/NUL; NULL if absent.
+static const char *cmdline_value(const char *cmdline, const char *key) {
+    if (cmdline == 0 || key == 0 || *key == '\0') {
+        return 0;
+    }
+
+    for (const char *p = cmdline; *p; p++) {
+        if (p != cmdline && p[-1] != ' ' && p[-1] != '\t') {
+            continue;
+        }
+        const char *a = p;
+        const char *b = key;
+        while (*a && *b && *a == *b) {
+            a++;
+            b++;
+        }
+        if (*b == '\0') {
+            return a;
+        }
+    }
+    return 0;
 }
 
 static void trigger_divide_error(void) {
@@ -117,6 +142,20 @@ void kmain(uint32_t magic, uint32_t mbi_addr) {
         kprintf("triggering page fault\n");
         trigger_page_fault();
         panic("page fault did not fire");
+    }
+
+    const sched_policy_t *policy = &sched_rr;
+    const char *policy_arg = cmdline_value(cmdline, "sched=");
+    if (policy_arg != 0) {
+        policy = sched_policy_find(policy_arg);
+        if (policy == 0) {
+            panic("unknown sched policy: %s", policy_arg);
+        }
+    }
+    sched_init(policy);
+    kprintf("sched: policy=%s quantum=%u ticks\n", policy->name, SCHED_QUANTUM_TICKS);
+    if (!sched_selftest()) {
+        qemu_exit(QEMU_EXIT_FAILURE);
     }
 
     while (pit_ticks() < TIMER_WAIT_TICKS) {
