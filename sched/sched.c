@@ -215,6 +215,22 @@ void sched_yield(void) {
     irq_restore(flags);
 }
 
+void sched_block(void) {
+    if (current->state == TASK_RUNNING) {
+        current->state = TASK_BLOCKED;
+    }
+    schedule();
+}
+
+void sched_wakeup(task_t *t) {
+    if (t == NULL || t->state != TASK_BLOCKED) {
+        return;
+    }
+    t->state = TASK_READY;
+    t->next = NULL;
+    rq_push(&ready, t);
+}
+
 void sched_wait_all(void) {
     uint32_t flags = irq_save();
     if (live_tasks > 0) {

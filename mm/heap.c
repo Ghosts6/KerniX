@@ -1,4 +1,5 @@
 #include <kernix/heap.h>
+#include <kernix/spinlock.h>
 #include <kernix/string.h>
 
 #include <stdint.h>
@@ -12,6 +13,7 @@ typedef struct heap_block {
 static heap_block_t *heap_head;
 static size_t heap_total;
 static size_t heap_used;
+static spinlock_t heap_lock = SPINLOCK_INIT;
 
 static size_t align_up(size_t n) {
     const size_t a = sizeof(void *);
@@ -56,6 +58,7 @@ void *kmalloc(size_t size) {
     }
 
     size = align_up(size);
+    uint32_t flags = spin_lock_irqsave(&heap_lock);
 
     for (heap_block_t *b = heap_head; b != 0; b = b->next) {
         if (!b->free || b->size < size) {
@@ -64,8 +67,11 @@ void *kmalloc(size_t size) {
         split_block(b, size);
         b->free = 0;
         heap_used += b->size;
-        return (void *)(b + 1);
+        void *ptr = (void *)(b + 1);
+        spin_unlock_irqrestore(&heap_lock, flags);
+        return ptr;
     }
+    spin_unlock_irqrestore(&heap_lock, flags);
     return 0;
 }
 
@@ -85,8 +91,10 @@ void kfree(void *ptr) {
         return;
     }
 
+    uint32_t flags = spin_lock_irqsave(&heap_lock);
     heap_block_t *block = ((heap_block_t *)ptr) - 1;
     if (block->free) {
+        spin_unlock_irqrestore(&heap_lock, flags);
         return;
     }
     block->free = 1;
@@ -96,15 +104,19 @@ void kfree(void *ptr) {
         heap_used = 0;
     }
     coalesce();
+    spin_unlock_irqrestore(&heap_lock, flags);
 }
 
 size_t heap_used_bytes(void) {
-    return heap_used;
+    uint32_t flags = spin_lock_irqsave(&heap_lock);
+    size_t used = heap_used;
+    spin_unlock_irqrestore(&heap_lock, flags);
+    return used;
 }
 
 size_t heap_free_bytes(void) {
-    if (heap_total < heap_used) {
-        return 0;
-    }
-    return heap_total - heap_used;
+    uint32_t flags = spin_lock_irqsave(&heap_lock);
+    size_t free_bytes = heap_total < heap_used ? 0 : heap_total - heap_used;
+    spin_unlock_irqrestore(&heap_lock, flags);
+    return free_bytes;
 }

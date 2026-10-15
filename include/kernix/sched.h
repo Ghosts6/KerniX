@@ -21,6 +21,11 @@ void task_exit(void) __attribute__((noreturn));
 void task_sleep(uint32_t ticks);
 void sched_yield(void);
 
+// Block the current task (IRQs must be off). Returns after sched_wakeup.
+void sched_block(void);
+// Mark a blocked task ready and enqueue it (IRQs must be off).
+void sched_wakeup(task_t *t);
+
 // Block the caller until every created task has exited, then free their stacks.
 // Only one task may wait at a time.
 void sched_wait_all(void);
