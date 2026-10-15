@@ -79,7 +79,11 @@ $(BUILD)/tests/host/$(HOST_ID)/pmm_test: tests/host/pmm_test.c mm/pmm.c lib/stri
 
 $(BUILD)/tests/host/$(HOST_ID)/heap_test: tests/host/heap_test.c mm/heap.c
 	@mkdir -p $(dir $@)
-	$(HOSTCC) $(HOSTCFLAGS) $^ -o $@
+	$(HOSTCC) $(HOSTCFLAGS) -DKERNIX_HOST_TEST $^ -o $@
+
+$(BUILD)/tests/host/$(HOST_ID)/sync_test: tests/host/sync_test.c
+	@mkdir -p $(dir $@)
+	$(HOSTCC) $(HOSTCFLAGS) -DKERNIX_HOST_TEST $^ -o $@
 
 $(BUILD)/tests/host/$(HOST_ID)/sched_test: tests/host/sched_test.c sched/policy.c sched/sim.c
 	@mkdir -p $(dir $@)

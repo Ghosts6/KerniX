@@ -14,6 +14,7 @@
 #include <kernix/heap.h>
 #include <kernix/sched.h>
 #include <kernix/sched_selftest.h>
+#include <kernix/sync_selftest.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -155,6 +156,9 @@ void kmain(uint32_t magic, uint32_t mbi_addr) {
     sched_init(policy);
     kprintf("sched: policy=%s quantum=%u ticks\n", policy->name, SCHED_QUANTUM_TICKS);
     if (!sched_selftest()) {
+        qemu_exit(QEMU_EXIT_FAILURE);
+    }
+    if (!sync_selftest()) {
         qemu_exit(QEMU_EXIT_FAILURE);
     }
 
