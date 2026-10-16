@@ -24,6 +24,11 @@ typedef struct task {
     uint32_t remaining; // modeled CPU burst left in ticks; 0 = not modeled
     uint32_t esp;       // saved stack pointer while switched out
     void *stack;
+    uint32_t kstack_top; // TSS.esp0 for user tasks (top of kernel stack)
+    uint32_t cr3;        // page directory phys; 0 means kernel PD
+    bool user;
+    uint32_t user_eip;
+    uint32_t user_esp;
     void (*entry)(void *);
     void *arg;
     uint32_t wake_tick;

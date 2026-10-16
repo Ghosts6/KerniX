@@ -1,7 +1,9 @@
 #include <kernix/sched.h>
 #include <kernix/cpu.h>
+#include <kernix/gdt.h>
 #include <kernix/heap.h>
 #include <kernix/kernel.h>
+#include <kernix/paging.h>
 #include <kernix/pit.h>
 
 #include <stdbool.h>
@@ -10,6 +12,7 @@
 #define TASK_STACK_SIZE 8192u
 
 extern void context_switch(uint32_t *old_esp, uint32_t new_esp);
+extern void enter_usermode(uint32_t entry, uint32_t user_stack) __attribute__((noreturn));
 
 static task_t tasks[SCHED_MAX_TASKS];
 static run_queue_t ready;
@@ -50,6 +53,11 @@ static void init_task(task_t *t, const char *name, int priority, uint32_t burst)
     t->remaining = 0;
     t->esp = 0;
     t->stack = NULL;
+    t->kstack_top = 0;
+    t->cr3 = 0;
+    t->user = false;
+    t->user_eip = 0;
+    t->user_esp = 0;
     t->entry = NULL;
     t->arg = NULL;
     t->wake_tick = 0;
@@ -60,6 +68,14 @@ static void init_task(task_t *t, const char *name, int priority, uint32_t burst)
     t->finish_tick = 0;
     t->run_ticks = 0;
     t->next = NULL;
+}
+
+static void activate_address_space(task_t *t) {
+    uint32_t pd = t->cr3 != 0 ? t->cr3 : vmm_kernel_pd_phys();
+    vmm_switch(pd);
+    if (t->kstack_top != 0) {
+        gdt_set_kernel_stack(t->kstack_top);
+    }
 }
 
 // Must run with interrupts disabled.
@@ -88,6 +104,7 @@ static void schedule(void) {
     if (next == prev) {
         return;
     }
+    activate_address_space(next);
     current = next;
     context_switch(&prev->esp, next->esp);
 }
@@ -97,6 +114,14 @@ static void task_trampoline(void) {
     sti();
     current->entry(current->arg);
     task_exit();
+}
+
+// First entry for ring-3 tasks: switch AS and iret into user mode.
+static void user_trampoline(void *arg) {
+    (void)arg;
+    cli();
+    activate_address_space(current);
+    enter_usermode(current->user_eip, current->user_esp);
 }
 
 static void idle_main(void *arg) {
@@ -120,11 +145,12 @@ static task_t *spawn(const char *name, void (*entry)(void *), void *arg, int pri
     init_task(t, name, priority, burst);
     t->remaining = burst;
     t->stack = stack;
+    t->kstack_top = (uint32_t)(uintptr_t)((uint8_t *)stack + TASK_STACK_SIZE);
     t->entry = entry;
     t->arg = arg;
 
     // Initial frame popped by context_switch: edi, esi, ebx, ebp, return address.
-    uint32_t *sp = (uint32_t *)((uint8_t *)stack + TASK_STACK_SIZE);
+    uint32_t *sp = (uint32_t *)(uintptr_t)t->kstack_top;
     *--sp = 0; // fake return address for the trampoline
     *--sp = (uint32_t)(uintptr_t)task_trampoline;
     *--sp = 0; // ebp
@@ -181,6 +207,19 @@ task_t *task_create(const char *name, void (*entry)(void *), void *arg, int prio
                     uint32_t burst) {
     uint32_t flags = irq_save();
     task_t *t = spawn(name, entry, arg, priority, burst, true);
+    irq_restore(flags);
+    return t;
+}
+
+task_t *task_create_user(const char *name, uint32_t cr3, uint32_t user_eip, uint32_t user_esp) {
+    uint32_t flags = irq_save();
+    task_t *t = spawn(name, user_trampoline, NULL, 5, 0, true);
+    if (t != NULL) {
+        t->user = true;
+        t->cr3 = cr3;
+        t->user_eip = user_eip;
+        t->user_esp = user_esp;
+    }
     irq_restore(flags);
     return t;
 }

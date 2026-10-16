@@ -18,6 +18,10 @@
 
 #define PTE_FRAME_MASK 0xFFFFF000u
 
+// Classic flat layout for user processes.
+#define USER_CODE_BASE 0x08048000u
+#define USER_STACK_TOP 0xBFFFF000u
+
 static inline uint32_t virt_to_phys(uint32_t vaddr) {
     return vaddr - KERNEL_VIRT_BASE;
 }
@@ -35,6 +39,18 @@ static inline uint32_t page_align_up(uint32_t addr) {
 }
 
 void paging_init(void);
+
+// Physical address of the shared kernel page directory.
+uint32_t vmm_kernel_pd_phys(void);
+
+// New address space with kernel mappings copied; returns PD physical address, or 0.
+uint32_t vmm_create_address_space(void);
+
+// Map one page into the given page directory (phys). Does not switch CR3.
+bool vmm_map_page(uint32_t pd_phys, uint32_t virt, uint32_t phys, uint32_t flags);
+
+void vmm_switch(uint32_t pd_phys);
+
 bool map_page(uint32_t virt, uint32_t phys, uint32_t flags);
 void unmap_page(uint32_t virt);
 uint32_t get_mapping(uint32_t virt);

@@ -14,10 +14,15 @@
 #define PDE_USER    0x004u
 #define PDE_4MB     0x080u
 
-static uint32_t *kernel_pd; // virtual address of the active page directory
+static uint32_t *kernel_pd; // virtual address of the shared kernel page directory
+static uint32_t kernel_pd_phys;
 
-static uint32_t *pde_table(uint32_t pde) {
-    uint32_t entry = kernel_pd[pde];
+static uint32_t *pd_virt(uint32_t pd_phys) {
+    return (uint32_t *)phys_to_virt(pd_phys);
+}
+
+static uint32_t *pde_table_in(uint32_t *pd, uint32_t pde) {
+    uint32_t entry = pd[pde];
     if ((entry & PDE_PRESENT) == 0) {
         return 0;
     }
@@ -27,11 +32,15 @@ static uint32_t *pde_table(uint32_t pde) {
     return (uint32_t *)phys_to_virt(entry & PTE_FRAME_MASK);
 }
 
-static uint32_t *ensure_page_table(uint32_t pde_index, uint32_t flags) {
-    uint32_t entry = kernel_pd[pde_index];
+static uint32_t *ensure_page_table_in(uint32_t *pd, uint32_t pde_index, uint32_t flags) {
+    uint32_t entry = pd[pde_index];
     if ((entry & PDE_PRESENT) != 0) {
         if ((entry & PDE_4MB) != 0) {
             panic("ensure_page_table: 4MiB PDE in use at %u", pde_index);
+        }
+        // Promote USER on an existing PDE when mapping user pages.
+        if ((flags & PAGE_USER) != 0 && (entry & PDE_USER) == 0) {
+            pd[pde_index] = entry | PDE_USER;
         }
         return (uint32_t *)phys_to_virt(entry & PTE_FRAME_MASK);
     }
@@ -49,8 +58,33 @@ static uint32_t *ensure_page_table(uint32_t pde_index, uint32_t flags) {
     if ((flags & PAGE_USER) != 0) {
         pde_flags |= PDE_USER;
     }
-    kernel_pd[pde_index] = (phys & PTE_FRAME_MASK) | pde_flags;
+    pd[pde_index] = (phys & PTE_FRAME_MASK) | pde_flags;
     return table;
+}
+
+static bool map_page_in(uint32_t pd_phys, uint32_t virt, uint32_t phys, uint32_t flags) {
+    uint32_t *pd = pd_virt(pd_phys);
+    uint32_t pdi = (virt >> 22) & 0x3FFu;
+    uint32_t pti = (virt >> 12) & 0x3FFu;
+
+    uint32_t *table = ensure_page_table_in(pd, pdi, flags);
+    if (table == 0) {
+        return false;
+    }
+
+    uint32_t pte_flags = PAGE_PRESENT;
+    if ((flags & PAGE_WRITE) != 0) {
+        pte_flags |= PAGE_WRITE;
+    }
+    if ((flags & PAGE_USER) != 0) {
+        pte_flags |= PAGE_USER;
+    }
+
+    table[pti] = (phys & PTE_FRAME_MASK) | pte_flags;
+    if (read_cr3() == pd_phys) {
+        invlpg(virt);
+    }
+    return true;
 }
 
 static void map_range_4k(uint32_t virt_start, uint32_t phys_start, uint32_t length,
@@ -72,32 +106,57 @@ void invlpg(uint32_t virt) {
     __asm__ volatile("invlpg (%0)" : : "r"(virt) : "memory");
 }
 
+uint32_t vmm_kernel_pd_phys(void) {
+    return kernel_pd_phys;
+}
+
+bool vmm_map_page(uint32_t pd_phys, uint32_t virt, uint32_t phys, uint32_t flags) {
+    return map_page_in(pd_phys, virt, phys, flags);
+}
+
+void vmm_switch(uint32_t pd_phys) {
+    if (pd_phys == 0) {
+        pd_phys = kernel_pd_phys;
+    }
+    if (read_cr3() != pd_phys) {
+        write_cr3(pd_phys);
+    }
+}
+
+uint32_t vmm_create_address_space(void) {
+    void *frame = pmm_alloc_frame();
+    if (frame == 0) {
+        return 0;
+    }
+    uint32_t pd_phys = (uint32_t)(uintptr_t)frame;
+    uint32_t *pd = pd_virt(pd_phys);
+    memset(pd, 0, PAGE_SIZE);
+
+    // Share kernel page tables (PDEs for low identity + higher half).
+    // User PDs get their own entries only below KERNEL_VIRT_BASE for user maps;
+    // kernel PDEs are copied by value so table pages stay shared.
+    for (uint32_t i = 0; i < PDE_COUNT; i++) {
+        uint32_t entry = kernel_pd[i];
+        if ((entry & PDE_PRESENT) == 0) {
+            continue;
+        }
+        // Keep identity + higher-half kernel mappings; leave room for user PDEs.
+        uint32_t virt_base = i << 22;
+        if (virt_base >= KERNEL_VIRT_BASE || virt_base < (KERNEL_EARLY_MAP_MB * 1024u * 1024u)) {
+            pd[i] = entry & ~PDE_USER;
+        }
+    }
+    return pd_phys;
+}
+
 bool map_page(uint32_t virt, uint32_t phys, uint32_t flags) {
-    uint32_t pdi = (virt >> 22) & 0x3FFu;
-    uint32_t pti = (virt >> 12) & 0x3FFu;
-
-    uint32_t *table = ensure_page_table(pdi, flags);
-    if (table == 0) {
-        return false;
-    }
-
-    uint32_t pte_flags = PAGE_PRESENT;
-    if ((flags & PAGE_WRITE) != 0) {
-        pte_flags |= PAGE_WRITE;
-    }
-    if ((flags & PAGE_USER) != 0) {
-        pte_flags |= PAGE_USER;
-    }
-
-    table[pti] = (phys & PTE_FRAME_MASK) | pte_flags;
-    invlpg(virt);
-    return true;
+    return map_page_in(kernel_pd_phys, virt, phys, flags);
 }
 
 void unmap_page(uint32_t virt) {
     uint32_t pdi = (virt >> 22) & 0x3FFu;
     uint32_t pti = (virt >> 12) & 0x3FFu;
-    uint32_t *table = pde_table(pdi);
+    uint32_t *table = pde_table_in(kernel_pd, pdi);
     if (table == 0) {
         return;
     }
@@ -141,23 +200,20 @@ void page_fault_dump(uint32_t err_code, uint32_t cr2) {
 }
 
 void paging_init(void) {
-    // Replace the bootstrap 4 MiB PSE directory with 4 KiB page tables.
     void *pd_frame = pmm_alloc_frame();
     if (pd_frame == 0) {
         panic("paging_init: no frame for page directory");
     }
 
-    uint32_t pd_phys = (uint32_t)(uintptr_t)pd_frame;
-    kernel_pd = (uint32_t *)phys_to_virt(pd_phys);
+    kernel_pd_phys = (uint32_t)(uintptr_t)pd_frame;
+    kernel_pd = (uint32_t *)phys_to_virt(kernel_pd_phys);
     memset(kernel_pd, 0, PAGE_SIZE);
 
     const uint32_t map_bytes = KERNEL_EARLY_MAP_MB * 1024u * 1024u;
     map_range_4k(0, 0, map_bytes, PAGE_PRESENT | PAGE_WRITE);
     map_range_4k(KERNEL_VIRT_BASE, 0, map_bytes, PAGE_PRESENT | PAGE_WRITE);
 
-    write_cr3(pd_phys);
-
-    // Drop PSE; all mappings are now 4 KiB.
+    write_cr3(kernel_pd_phys);
     write_cr4(read_cr4() & ~0x00000010u);
 
     kprintf("paging: 4K tables active, mapped low %u MiB + higher half\n",

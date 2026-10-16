@@ -17,6 +17,8 @@ task_t *sched_current(void);
 
 task_t *task_create(const char *name, void (*entry)(void *), void *arg, int priority,
                     uint32_t burst);
+// Create a ring-3 task; entry is via iret into user_eip/user_esp with CR3=cr3.
+task_t *task_create_user(const char *name, uint32_t cr3, uint32_t user_eip, uint32_t user_esp);
 void task_exit(void) __attribute__((noreturn));
 void task_sleep(uint32_t ticks);
 void sched_yield(void);
