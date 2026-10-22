@@ -76,8 +76,17 @@ IRQ 13, 45
 IRQ 14, 46
 IRQ 15, 47
 
+; Syscall vector 0x80 (no CPU error code).
+global isr128
+isr128:
+    cli
+    push dword 0
+    push dword 0x80
+    jmp syscall_common_stub
+
 extern isr_handler
 extern irq_handler
+extern syscall_handler
 
 isr_common_stub:
     pusha
@@ -131,4 +140,31 @@ irq_common_stub:
     add esp, 8
     iret
 
+syscall_common_stub:
+    pusha
+    push ds
+    push es
+    push fs
+    push gs
+
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    mov eax, esp
+    push eax
+    call syscall_handler
+    add esp, 4
+
+    pop gs
+    pop fs
+    pop es
+    pop ds
+    popa
+    add esp, 8
+    iret
+
 section .note.GNU-stack noalloc noexec nowrite progbits
+

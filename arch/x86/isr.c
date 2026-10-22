@@ -8,6 +8,9 @@
 #include <kernix/io.h>
 #include <kernix/paging.h>
 #include <kernix/sched.h>
+#include <kernix/syscall.h>
+
+#include <stdbool.h>
 
 static const char *exception_name(uint32_t num) {
     static const char *names[] = {
@@ -41,9 +44,13 @@ static const char *exception_name(uint32_t num) {
 
 void isr_init(void) {
     idt_init();
+    syscall_init();
 }
 
 void isr_handler(interrupt_frame_t *frame) {
+    bool from_user = (frame->cs & 3u) == 3u;
+    task_t *cur = sched_current();
+
     kprintf("exception %u (%s) err=0x%x\n", frame->int_no, exception_name(frame->int_no),
             frame->err_code);
     kprintf("  eax=%x ebx=%x ecx=%x edx=%x\n", frame->eax, frame->ebx, frame->ecx, frame->edx);
@@ -54,7 +61,12 @@ void isr_handler(interrupt_frame_t *frame) {
         page_fault_dump(frame->err_code, read_cr2());
     }
 
-    // Report the fault cleanly for tests; do not triple-fault.
+    if (from_user && cur != 0 && cur->user) {
+        kprintf("user fault pid=%u — killing process\n", cur->id);
+        task_exit();
+    }
+
+    // Kernel fault: report cleanly for tests; do not triple-fault.
     qemu_exit(QEMU_EXIT_SUCCESS);
 }
 
