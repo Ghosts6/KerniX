@@ -209,6 +209,20 @@ void pmm_init(uint32_t mbi_addr) {
     if ((mbi->flags & MULTIBOOT_INFO_CMDLINE) != 0 && mbi->cmdline != 0) {
         mark_region_used(mbi->cmdline, strlen((const char *)(uintptr_t)mbi->cmdline) + 1u);
     }
+    if ((mbi->flags & MULTIBOOT_INFO_MODS) != 0 && mbi->mods_count != 0 && mbi->mods_addr != 0) {
+        mark_region_used(mbi->mods_addr, mbi->mods_count * sizeof(multiboot_module_t));
+        const multiboot_module_t *mods =
+            (const multiboot_module_t *)(uintptr_t)mbi->mods_addr;
+        for (uint32_t i = 0; i < mbi->mods_count; i++) {
+            if (mods[i].mod_end > mods[i].mod_start) {
+                mark_region_used(mods[i].mod_start, mods[i].mod_end - mods[i].mod_start);
+            }
+            if (mods[i].string != 0) {
+                mark_region_used(mods[i].string,
+                                 strlen((const char *)(uintptr_t)mods[i].string) + 1u);
+            }
+        }
+    }
 }
 
 void *pmm_alloc_frame(void) {

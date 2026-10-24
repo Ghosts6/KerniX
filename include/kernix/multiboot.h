@@ -5,6 +5,7 @@
 
 #define MULTIBOOT_INFO_MEMORY  (1u << 0)
 #define MULTIBOOT_INFO_CMDLINE (1u << 2)
+#define MULTIBOOT_INFO_MODS    (1u << 3)
 #define MULTIBOOT_INFO_MMAP    (1u << 6)
 
 #define MULTIBOOT_MEMORY_AVAILABLE 1u
@@ -22,6 +23,13 @@ typedef struct multiboot_info {
     uint32_t mmap_addr;
 } multiboot_info_t;
 
+typedef struct multiboot_module {
+    uint32_t mod_start;
+    uint32_t mod_end;
+    uint32_t string;
+    uint32_t reserved;
+} multiboot_module_t;
+
 typedef struct multiboot_mmap_entry {
     uint32_t size;
     uint64_t addr;
@@ -31,5 +39,6 @@ typedef struct multiboot_mmap_entry {
 
 const char *multiboot_cmdline(uint32_t mbi_addr);
 const multiboot_info_t *multiboot_info(uint32_t mbi_addr);
+const multiboot_module_t *multiboot_modules(uint32_t mbi_addr, uint32_t *count);
 
 #endif

@@ -3,6 +3,7 @@
 KERNEL    := kernix
 BUILD     := build
 ELF       := $(BUILD)/$(KERNEL).elf
+USER_HELLO := $(BUILD)/user/hello.bin
 LDSCRIPT  := arch/x86/linker.ld
 SRC_DIRS  := arch kernel mm sched sync drivers lib
 
@@ -30,8 +31,8 @@ LDLIBS    := -lgcc
 # -display none so isa-debug-exit can terminate QEMU (macOS cocoa keeps the process alive).
 # Override with: make run QEMUDISPLAY=cocoa
 QEMUDISPLAY ?= none
-QEMUFLAGS := -kernel $(ELF) -serial stdio -display $(QEMUDISPLAY) -no-reboot \
-             -device isa-debug-exit,iobase=0xf4,iosize=0x04
+QEMUFLAGS := -kernel $(ELF) -initrd $(USER_HELLO) -serial stdio -display $(QEMUDISPLAY) \
+             -no-reboot -device isa-debug-exit,iobase=0xf4,iosize=0x04
 
 C_SRCS    := $(shell find $(SRC_DIRS) -name '*.c' 2>/dev/null)
 ASM_SRCS  := $(shell find $(SRC_DIRS) -name '*.asm' 2>/dev/null)
@@ -49,7 +50,11 @@ DOCKER_IMAGE := kernix-build
 
 .PHONY: all run debug clean test test-host test-qemu docker-build docker help toolchain
 
-all: $(ELF)
+all: $(ELF) $(USER_HELLO)
+
+$(USER_HELLO): user/hello.asm
+	@mkdir -p $(dir $@)
+	$(AS) -f bin $< -o $@
 
 toolchain:
 	@if [ -n "$(TOOLCHAIN_ERROR)" ]; then echo "$(TOOLCHAIN_ERROR)" >&2; exit 1; fi
@@ -89,13 +94,13 @@ $(BUILD)/tests/host/$(HOST_ID)/sched_test: tests/host/sched_test.c sched/policy.
 	@mkdir -p $(dir $@)
 	$(HOSTCC) $(HOSTCFLAGS) $^ -o $@
 
-run: $(ELF)
+run: $(ELF) $(USER_HELLO)
 	@$(QEMU) $(QEMUFLAGS); \
 	ec=$$?; \
 	if [ $$ec -eq 1 ]; then exit 0; fi; \
 	exit $$ec
 
-debug: $(ELF)
+debug: $(ELF) $(USER_HELLO)
 	@echo "QEMU paused, GDB stub on localhost:1234"
 	@echo "Attach with: gdb $(ELF) -ex 'target remote localhost:1234'"
 	$(QEMU) $(QEMUFLAGS) -s -S
@@ -111,8 +116,8 @@ test-host: $(HOST_TEST_BINS)
 	done; \
 	exit $$status
 
-test-qemu: $(ELF)
-	./scripts/test-qemu.sh $(ELF)
+test-qemu: $(ELF) $(USER_HELLO)
+	./scripts/test-qemu.sh $(ELF) $(USER_HELLO)
 
 clean:
 	rm -rf $(BUILD)

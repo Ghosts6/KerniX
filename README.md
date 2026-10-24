@@ -4,9 +4,10 @@
 
 KerniX is a small, educational 32-bit x86 kernel written in C and NASM
 assembly. It boots in QEMU and implements the core of an operating system from
-scratch: interrupts, physical and virtual memory, and preemptive scheduling of
-kernel threads. There is no GUI and no userland; the goal is a kernel that is
-small enough to read end to end.
+scratch: interrupts, physical and virtual memory, preemptive scheduling,
+synchronization, and a minimal ring-3 user mode with system calls. There is no
+GUI or full userland distribution; the goal is a kernel that is small enough to
+read end to end.
 
 It is a good fit if you want to see how these pieces work on real (emulated)
 hardware, step through them in GDB, or compare scheduling algorithms on live
@@ -31,6 +32,12 @@ Coming soon: a video walkthrough of building, booting and testing KerniX.
   into one scheduler core: FCFS, SJF, Priority, RR and Priority-RR, ported from
   the course project. Each run prints course-style waiting, turnaround and
   response times.
+- **Synchronization:** spinlocks, wait queues, mutexes and semaphores; the
+  heap is IRQ-safe under preemption.
+- **User mode:** TSS and ring-3 segments, per-process page directories, `int
+  0x80` syscalls (`write`, `exit`, `yield`, `getpid`). A flat Multiboot module
+  (`-initrd build/user/hello.bin`) prints via `write` and exits; user faults
+  kill the process instead of panicking the kernel.
 
 ## Getting Started
 

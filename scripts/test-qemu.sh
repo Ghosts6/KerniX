@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ELF="${1:-$ROOT/build/kernix.elf}"
+INITRD="${2:-$ROOT/build/user/hello.bin}"
 QEMU="${QEMU:-qemu-system-i386}"
 BANNER="KerniX boot OK"
 # isa-debug-exit: writing code 0 yields process exit status 1.
@@ -11,6 +12,10 @@ EXPECT_EXIT=1
 
 if [[ ! -f "$ELF" ]]; then
     echo "missing kernel ELF: $ELF (run make first)" >&2
+    exit 1
+fi
+if [[ ! -f "$INITRD" ]]; then
+    echo "missing user initrd: $INITRD (run make first)" >&2
     exit 1
 fi
 
@@ -62,6 +67,7 @@ run_qemu() {
     local -a cmd=(
         "$QEMU"
         -kernel "$ELF"
+        -initrd "$INITRD"
         -serial stdio
         -display none
         -no-reboot
@@ -157,6 +163,22 @@ for want in "sync mutex ok" "sync pc ok"; do
     fi
 done
 echo "ok sync mutex, producer/consumer"
+
+if ! grep -q "hello from user" "$SERIAL"; then
+    echo "FAIL user hello message not found" >&2
+    echo "--- serial ---" >&2
+    cat "$SERIAL" >&2 || true
+    exit 1
+fi
+for want in "user hello ok" "user fault pid=" "user fault ok"; do
+    if ! grep -q "$want" "$SERIAL"; then
+        echo "FAIL '$want' not found" >&2
+        echo "--- serial ---" >&2
+        cat "$SERIAL" >&2 || true
+        exit 1
+    fi
+done
+echo "ok user mode hello + fault kill"
 
 for policy in fcfs sjf priority priority_rr; do
     SERIAL_SCHED="$(run_qemu "sched=$policy")"
