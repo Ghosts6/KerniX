@@ -51,6 +51,14 @@ void isr_handler(interrupt_frame_t *frame) {
     bool from_user = (frame->cs & 3u) == 3u;
     task_t *cur = sched_current();
 
+    if (frame->int_no == 14 && from_user && cur != 0 && cur->user) {
+        uint32_t cr2 = read_cr2();
+        if ((frame->err_code & PF_WRITE) != 0 &&
+            vmm_handle_cow_fault(cur->cr3 != 0 ? cur->cr3 : read_cr3(), cr2)) {
+            return; // retry the faulting store
+        }
+    }
+
     kprintf("exception %u (%s) err=0x%x\n", frame->int_no, exception_name(frame->int_no),
             frame->err_code);
     kprintf("  eax=%x ebx=%x ecx=%x edx=%x\n", frame->eax, frame->ebx, frame->ecx, frame->edx);

@@ -9,6 +9,22 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+static int32_t sys_fork(interrupt_frame_t *frame) {
+    task_t *parent = sched_current();
+    if (parent == 0 || !parent->user || parent->cr3 == 0) {
+        return -1;
+    }
+    uint32_t child_cr3 = vmm_clone_cow(parent->cr3);
+    if (child_cr3 == 0) {
+        return -1;
+    }
+    task_t *child = task_fork_from(frame, child_cr3);
+    if (child == 0) {
+        return -1;
+    }
+    return (int32_t)child->id;
+}
+
 extern void isr128(void);
 
 static bool user_ptr_ok(uint32_t ptr, uint32_t len) {
@@ -59,6 +75,9 @@ void syscall_handler(interrupt_frame_t *frame) {
         ret = t != 0 ? (int32_t)t->id : -1;
         break;
     }
+    case SYS_FORK:
+        ret = sys_fork(frame);
+        break;
     default:
         kprintf("syscall: unknown %u from pid=%u\n", num,
                 sched_current() != 0 ? sched_current()->id : 0);

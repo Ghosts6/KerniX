@@ -42,6 +42,7 @@ extern char kernel_end[];
 #endif
 
 static uint32_t bitmap[PMM_BITMAP_WORDS];
+static uint16_t refcount[PMM_MAX_FRAMES];
 static uint32_t total_frames;
 static uint32_t used_frames;
 
@@ -230,6 +231,7 @@ void *pmm_alloc_frame(void) {
         if (!bitmap_test(f)) {
             bitmap_set(f);
             used_frames++;
+            refcount[f] = 1;
             return (void *)(uintptr_t)(f * PMM_FRAME_SIZE);
         }
     }
@@ -254,8 +256,48 @@ void pmm_free_frame(void *frame) {
         panic("pmm_free_frame: double free %x", addr);
     }
 
+    refcount[f] = 0;
     bitmap_clear(f);
     used_frames--;
+}
+
+void pmm_ref_frame(void *frame) {
+    if (frame == 0) {
+        return;
+    }
+    uint32_t f = (uint32_t)(uintptr_t)frame / PMM_FRAME_SIZE;
+    if (f >= total_frames || !bitmap_test(f)) {
+        return;
+    }
+    if (refcount[f] < 0xFFFFu) {
+        refcount[f]++;
+    }
+}
+
+void pmm_unref_frame(void *frame) {
+    if (frame == 0) {
+        return;
+    }
+    uint32_t f = (uint32_t)(uintptr_t)frame / PMM_FRAME_SIZE;
+    if (f >= total_frames || !bitmap_test(f)) {
+        return;
+    }
+    if (refcount[f] > 1) {
+        refcount[f]--;
+        return;
+    }
+    pmm_free_frame(frame);
+}
+
+uint32_t pmm_frame_refcount(void *frame) {
+    if (frame == 0) {
+        return 0;
+    }
+    uint32_t f = (uint32_t)(uintptr_t)frame / PMM_FRAME_SIZE;
+    if (f >= total_frames || !bitmap_test(f)) {
+        return 0;
+    }
+    return refcount[f];
 }
 
 uint32_t pmm_total_frames(void) {

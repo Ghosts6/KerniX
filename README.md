@@ -24,9 +24,9 @@ Coming soon: a video walkthrough of building, booting and testing KerniX.
   Output goes to both the COM1 serial port and VGA text mode.
 - **CPU and interrupts:** GDT, IDT, exception handlers that dump registers
   (including decoded page faults), remapped PIC and a 100 Hz PIT timer.
-- **Memory:** bitmap physical frame allocator built from the Multiboot memory
-  map, 4 KiB paging with the kernel mapped at `0xC0000000`, a `map_page` /
-  `unmap_page` API, and a free-list `kmalloc` / `kfree` heap.
+- **Memory:** bitmap physical frame allocator (with frame refcounts for COW),
+  4 KiB paging with the kernel mapped at `0xC0000000`, a free-list `kmalloc` /
+  `kfree` heap, and a slab allocator for fixed-size objects.
 - **Scheduling:** kernel threads with create, exit, yield and sleep, an
   assembly context switch, an idle task and timer preemption. Policies plug
   into one scheduler core: FCFS, SJF, Priority, RR and Priority-RR, ported from
@@ -35,9 +35,11 @@ Coming soon: a video walkthrough of building, booting and testing KerniX.
 - **Synchronization:** spinlocks, wait queues, mutexes and semaphores; the
   heap is IRQ-safe under preemption.
 - **User mode:** TSS and ring-3 segments, per-process page directories, `int
-  0x80` syscalls (`write`, `exit`, `yield`, `getpid`). A flat Multiboot module
-  (`-initrd build/user/hello.bin`) prints via `write` and exits; user faults
-  kill the process instead of panicking the kernel.
+  0x80` syscalls (`write`, `exit`, `yield`, `getpid`, `fork` with copy-on-write).
+  A flat Multiboot module (`-initrd build/user/hello.bin`) prints via `write`
+  and exits; user faults kill the process instead of panicking the kernel.
+- **C++ / SMP / x86_64:** freestanding C++ (`new`/`delete`, global constructors),
+  APIC detect in UP mode, and an optional long-mode skeleton (`make x86_64`).
 
 ## Getting Started
 

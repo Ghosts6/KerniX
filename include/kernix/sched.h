@@ -3,6 +3,7 @@
 
 #include <kernix/sched_policy.h>
 #include <kernix/task.h>
+#include <kernix/isr.h>
 
 #include <stdint.h>
 
@@ -19,6 +20,8 @@ task_t *task_create(const char *name, void (*entry)(void *), void *arg, int prio
                     uint32_t burst);
 // Create a ring-3 task; entry is via iret into user_eip/user_esp with CR3=cr3.
 task_t *task_create_user(const char *name, uint32_t cr3, uint32_t user_eip, uint32_t user_esp);
+// Clone the current user task for fork; child resumes frame with eax=0.
+task_t *task_fork_from(interrupt_frame_t *frame, uint32_t child_cr3);
 void task_exit(void) __attribute__((noreturn));
 void task_sleep(uint32_t ticks);
 void sched_yield(void);

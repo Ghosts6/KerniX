@@ -9,6 +9,9 @@
 void pmm_init(uint32_t mbi_addr);
 void *pmm_alloc_frame(void);
 void pmm_free_frame(void *frame);
+void pmm_ref_frame(void *frame);
+void pmm_unref_frame(void *frame);
+uint32_t pmm_frame_refcount(void *frame);
 uint32_t pmm_total_frames(void);
 uint32_t pmm_used_frames(void);
 uint32_t pmm_free_frames(void);

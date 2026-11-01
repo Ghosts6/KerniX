@@ -180,6 +180,16 @@ for want in "user hello ok" "user fault pid=" "user fault ok"; do
 done
 echo "ok user mode hello + fault kill"
 
+for want in "fork parent" "fork child" "user fork ok" "cxx smoke ok" "slab: ready" "smp:"; do
+    if ! grep -q "$want" "$SERIAL"; then
+        echo "FAIL '$want' not found" >&2
+        echo "--- serial ---" >&2
+        cat "$SERIAL" >&2 || true
+        exit 1
+    fi
+done
+echo "ok stage8 cxx, slab, fork, smp"
+
 for policy in fcfs sjf priority priority_rr; do
     SERIAL_SCHED="$(run_qemu "sched=$policy")"
     if ! grep -q "sched demo ok policy=$policy " "$SERIAL_SCHED"; then

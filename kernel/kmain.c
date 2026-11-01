@@ -12,6 +12,9 @@
 #include <kernix/pmm.h>
 #include <kernix/paging.h>
 #include <kernix/heap.h>
+#include <kernix/slab.h>
+#include <kernix/cxx.h>
+#include <kernix/smp.h>
 #include <kernix/sched.h>
 #include <kernix/sched_selftest.h>
 #include <kernix/sync_selftest.h>
@@ -19,6 +22,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+
+extern bool cxx_smoke_test(void);
 
 #define PIT_HZ           100
 #define TIMER_WAIT_TICKS 10
@@ -121,12 +126,30 @@ void kmain(uint32_t magic, uint32_t mbi_addr) {
     paging_init();
 
     heap_init(kernel_heap, sizeof(kernel_heap));
+    slab_init();
+    cxx_init();
+    smp_init();
+
     void *smoke = kmalloc(64);
     if (smoke == 0) {
         panic("heap smoke alloc failed");
     }
     kfree(smoke);
     kprintf("heap: %u KiB ready\n", KERNEL_HEAP_SIZE / 1024u);
+
+    slab_cache_t *sc = slab_create("smoke32", 32);
+    void *sa = sc ? slab_alloc(sc) : 0;
+    void *sb = sc ? slab_alloc(sc) : 0;
+    if (sa == 0 || sb == 0 || sa == sb) {
+        panic("slab smoke alloc failed");
+    }
+    slab_free(sc, sa);
+    slab_free(sc, sb);
+    kprintf("slab: ready\n");
+
+    if (!cxx_smoke_test()) {
+        qemu_exit(QEMU_EXIT_FAILURE);
+    }
 
     if (cmdline_has(cmdline, "fault=de")) {
         kprintf("triggering divide error\n");

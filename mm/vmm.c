@@ -79,6 +79,9 @@ static bool map_page_in(uint32_t pd_phys, uint32_t virt, uint32_t phys, uint32_t
     if ((flags & PAGE_USER) != 0) {
         pte_flags |= PAGE_USER;
     }
+    if ((flags & PAGE_COW) != 0) {
+        pte_flags |= PAGE_COW;
+    }
 
     table[pti] = (phys & PTE_FRAME_MASK) | pte_flags;
     if (read_cr3() == pd_phys) {
@@ -112,6 +115,91 @@ uint32_t vmm_kernel_pd_phys(void) {
 
 bool vmm_map_page(uint32_t pd_phys, uint32_t virt, uint32_t phys, uint32_t flags) {
     return map_page_in(pd_phys, virt, phys, flags);
+}
+
+uint32_t vmm_get_mapping(uint32_t pd_phys, uint32_t virt, uint32_t *flags_out) {
+    uint32_t *pd = pd_virt(pd_phys);
+    uint32_t pdi = (virt >> 22) & 0x3FFu;
+    uint32_t pti = (virt >> 12) & 0x3FFu;
+    uint32_t *table = pde_table_in(pd, pdi);
+    if (table == 0) {
+        return 0;
+    }
+    uint32_t pte = table[pti];
+    if ((pte & PAGE_PRESENT) == 0) {
+        return 0;
+    }
+    if (flags_out != 0) {
+        *flags_out = pte & ~PTE_FRAME_MASK;
+    }
+    return pte & PTE_FRAME_MASK;
+}
+
+static bool set_pte_flags(uint32_t pd_phys, uint32_t virt, uint32_t new_flags, uint32_t phys) {
+    uint32_t *pd = pd_virt(pd_phys);
+    uint32_t pdi = (virt >> 22) & 0x3FFu;
+    uint32_t pti = (virt >> 12) & 0x3FFu;
+    uint32_t *table = pde_table_in(pd, pdi);
+    if (table == 0) {
+        return false;
+    }
+    table[pti] = (phys & PTE_FRAME_MASK) | (new_flags & ~PTE_FRAME_MASK);
+    if (read_cr3() == pd_phys) {
+        invlpg(virt);
+    }
+    return true;
+}
+
+uint32_t vmm_clone_cow(uint32_t src_pd_phys) {
+    uint32_t dst = vmm_create_address_space();
+    if (dst == 0) {
+        return 0;
+    }
+
+    // Share user pages read-only between parent and child.
+    for (uint32_t virt = USER_CODE_BASE; virt < USER_STACK_TOP; virt += PAGE_SIZE) {
+        uint32_t flags = 0;
+        uint32_t phys = vmm_get_mapping(src_pd_phys, virt, &flags);
+        if (phys == 0) {
+            continue;
+        }
+        uint32_t shared = (flags | PAGE_COW | PAGE_USER | PAGE_PRESENT) & ~PAGE_WRITE;
+        if (!set_pte_flags(src_pd_phys, virt, shared, phys)) {
+            return 0;
+        }
+        if (!vmm_map_page(dst, virt, phys, shared)) {
+            return 0;
+        }
+        pmm_ref_frame((void *)(uintptr_t)phys);
+    }
+    return dst;
+}
+
+bool vmm_handle_cow_fault(uint32_t pd_phys, uint32_t virt) {
+    uint32_t flags = 0;
+    uint32_t phys = vmm_get_mapping(pd_phys, virt, &flags);
+    if (phys == 0 || (flags & PAGE_COW) == 0) {
+        return false;
+    }
+
+    void *old = (void *)(uintptr_t)phys;
+    if (pmm_frame_refcount(old) == 1) {
+        // Last reference: just make it writable.
+        uint32_t nf = (flags | PAGE_WRITE) & ~PAGE_COW;
+        return set_pte_flags(pd_phys, virt, nf, phys);
+    }
+
+    void *frame = pmm_alloc_frame();
+    if (frame == 0) {
+        return false;
+    }
+    uint32_t neu = (uint32_t)(uintptr_t)frame;
+    memcpy((void *)(uintptr_t)phys_to_virt(neu), (void *)(uintptr_t)phys_to_virt(phys),
+           PAGE_SIZE);
+    pmm_unref_frame(old);
+
+    uint32_t nf = (flags | PAGE_WRITE | PAGE_PRESENT | PAGE_USER) & ~PAGE_COW;
+    return set_pte_flags(pd_phys, virt, nf, neu);
 }
 
 void vmm_switch(uint32_t pd_phys) {

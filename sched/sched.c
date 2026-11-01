@@ -13,6 +13,7 @@
 
 extern void context_switch(uint32_t *old_esp, uint32_t new_esp);
 extern void enter_usermode(uint32_t entry, uint32_t user_stack) __attribute__((noreturn));
+extern void fork_return(void);
 
 static task_t tasks[SCHED_MAX_TASKS];
 static run_queue_t ready;
@@ -220,6 +221,52 @@ task_t *task_create_user(const char *name, uint32_t cr3, uint32_t user_eip, uint
         t->user_eip = user_eip;
         t->user_esp = user_esp;
     }
+    irq_restore(flags);
+    return t;
+}
+
+task_t *task_fork_from(interrupt_frame_t *frame, uint32_t child_cr3) {
+    if (frame == NULL || child_cr3 == 0 || current == NULL || !current->user) {
+        return NULL;
+    }
+
+    uint32_t flags = irq_save();
+    task_t *t = alloc_slot();
+    if (t == NULL) {
+        irq_restore(flags);
+        return NULL;
+    }
+    void *stack = kmalloc(TASK_STACK_SIZE);
+    if (stack == NULL) {
+        irq_restore(flags);
+        return NULL;
+    }
+
+    init_task(t, "child", current->priority, 0);
+    t->stack = stack;
+    t->kstack_top = (uint32_t)(uintptr_t)((uint8_t *)stack + TASK_STACK_SIZE);
+    t->user = true;
+    t->cr3 = child_cr3;
+    t->user_eip = frame->eip;
+    t->user_esp = frame->useresp;
+
+    // Place a copy of the syscall frame at the top of the child stack.
+    interrupt_frame_t *child_frame =
+        (interrupt_frame_t *)(uintptr_t)(t->kstack_top - sizeof(interrupt_frame_t));
+    *child_frame = *frame;
+    child_frame->eax = 0; // fork returns 0 in the child
+
+    uint32_t *sp = (uint32_t *)child_frame;
+    *--sp = (uint32_t)(uintptr_t)fork_return;
+    *--sp = 0; // ebp
+    *--sp = 0; // ebx
+    *--sp = 0; // esi
+    *--sp = 0; // edi
+    t->esp = (uint32_t)(uintptr_t)sp;
+
+    t->state = TASK_READY;
+    rq_push(&ready, t);
+    live_tasks++;
     irq_restore(flags);
     return t;
 }

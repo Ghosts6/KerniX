@@ -15,6 +15,8 @@
 #define PAGE_PRESENT 0x001u
 #define PAGE_WRITE   0x002u
 #define PAGE_USER    0x004u
+// Available software PTE bit — marks a shared copy-on-write page.
+#define PAGE_COW     0x200u
 
 #define PTE_FRAME_MASK 0xFFFFF000u
 
@@ -48,6 +50,15 @@ uint32_t vmm_create_address_space(void);
 
 // Map one page into the given page directory (phys). Does not switch CR3.
 bool vmm_map_page(uint32_t pd_phys, uint32_t virt, uint32_t phys, uint32_t flags);
+
+// Physical frame for virt in pd, or 0. Optionally returns raw PTE flags.
+uint32_t vmm_get_mapping(uint32_t pd_phys, uint32_t virt, uint32_t *flags_out);
+
+// Clone user mappings from src as read-only COW into a new address space.
+uint32_t vmm_clone_cow(uint32_t src_pd_phys);
+
+// Resolve a write fault on a COW page in the active address space. Returns true if handled.
+bool vmm_handle_cow_fault(uint32_t pd_phys, uint32_t virt);
 
 void vmm_switch(uint32_t pd_phys);
 

@@ -21,6 +21,14 @@ SECTIONS
         *(.rodata*)
     }
 
+    .init_array : AT(ADDR(.init_array) - KERNEL_VIRT_BASE)
+    {
+        PROVIDE_HIDDEN(__init_array_start = .);
+        KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*) SORT_BY_INIT_PRIORITY(.ctors.*)))
+        KEEP(*(.init_array EXCLUDE_FILE(*crtbegin.o *crtbegin?.o) .ctors))
+        PROVIDE_HIDDEN(__init_array_end = .);
+    }
+
     .data BLOCK(4K) : AT(ADDR(.data) - KERNEL_VIRT_BASE)
     {
         *(.data*)
@@ -34,7 +42,6 @@ SECTIONS
 
     kernel_end = .;
 
-    /* Multiboot/QEMU jumps to the physical address of the entry point. */
     start = _start - KERNEL_VIRT_BASE;
 
     /DISCARD/ :
